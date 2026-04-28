@@ -118,7 +118,7 @@ bash "${SCRIPT_DIR}/generate_product_json.sh" --compress output product.json
 # ---------------------------------------------------------------------------
 echo "Generating figures manifest ..."
 
-IMAGE_DIR="output"
+IMAGE_DIR="figures/images"
 OUTPUT_DIR="."
 
 bash "${SCRIPT_DIR}/generate_figures_manifest.sh" "$IMAGE_DIR" "$OUTPUT_DIR"
