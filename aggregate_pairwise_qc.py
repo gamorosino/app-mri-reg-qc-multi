@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import math
+
+import numpy as np
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+
+DEFAULT_METRICS = [
+    "ncc",
+    "nmi",
+    "mse",
+    "ssim",
+    "dice",
+    "jaccard",
+]
+
+
+def safe_name(path):
+    base = os.path.basename(path)
+    for suffix in [".nii.gz", ".nii", ".mgz", ".mgh"]:
+        if base.endswith(suffix):
+            return base[: -len(suffix)]
+    return os.path.splitext(base)[0]
+
+
+def load_config(path):
+    with open(path, "r") as f:
+        cfg = json.load(f)
+
+    images = cfg.get("images", [])
+    if len(images) < 2:
+        raise ValueError("config.json must contain at least two images in .images[]")
+
+    return cfg, images
+
+
+def load_pair_metrics(output_dir, i, j):
+    pair_dir = os.path.join(output_dir, f"pair_{i:02d}_{j:02d}")
+    metrics_path = os.path.join(pair_dir, "metrics.json")
+
+    if not os.path.exists(metrics_path):
+        raise FileNotFoundError(f"Missing metrics file: {metrics_path}")
+
+    with open(metrics_path, "r") as f:
+        return json.load(f)
+
+
+def build_metric_matrices(images, output_dir, metric_names):
+    n = len(images)
+
+    matrices = {
+        metric: np.full((n, n), np.nan, dtype=float)
+        for metric in metric_names
+    }
+
+    for i in range(n):
+        for metric in metric_names:
+            if metric in ("ncc", "nmi", "ssim", "dice", "jaccard"):
+                matrices[metric][i, i] = 1.0
+            elif metric == "mse":
+                matrices[metric][i, i] = 0.0
+
+    pair_metrics = {}
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            metrics = load_pair_metrics(output_dir, i, j)
+            pair_key = f"{i},{j}"
+            pair_metrics[pair_key] = metrics
+
+            for metric in metric_names:
+                value = metrics.get(metric, None)
+
+                if value is None:
+                    continue
+
+                try:
+                    value = float(value)
+                except Exception:
+                    continue
+
+                matrices[metric][i, j] = value
+                matrices[metric][j, i] = value
+
+    return matrices, pair_metrics
+
+
+def save_group_metrics(images, labels, matrices, pair_metrics, output_dir):
+    out = {
+        "images": [
+            {
+                "index": i,
+                "path": path,
+                "label": labels[i],
+            }
+            for i, path in enumerate(images)
+        ],
+        "pair_metrics": pair_metrics,
+        "matrices": {
+            metric: matrix.tolist()
+            for metric, matrix in matrices.items()
+        },
+    }
+
+    path = os.path.join(output_dir, "group_metrics.json")
+    with open(path, "w") as f:
+        json.dump(out, f, indent=4)
+
+    print(f"[GROUP QC] Saved {path}")
+
+
+def plot_matrix(matrix, labels, metric, output_path):
+    fig, ax = plt.subplots(figsize=(max(6, len(labels) * 0.7), max(5, len(labels) * 0.7)))
+
+    im = ax.imshow(matrix)
+
+    ax.set_title(f"Pairwise {metric.upper()} matrix")
+    ax.set_xticks(np.arange(len(labels)))
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_yticklabels(labels, fontsize=8)
+
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            val = matrix[i, j]
+            if np.isfinite(val):
+                ax.text(j, i, f"{val:.3f}", ha="center", va="center", fontsize=7)
+
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"[GROUP QC] Saved {output_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Aggregate pairwise MRI registration QC metrics into matrices."
+    )
+    parser.add_argument("--config", required=True, help="config.json with images[]")
+    parser.add_argument("--output-dir", default="output", help="Output directory")
+    parser.add_argument(
+        "--metrics",
+        nargs="+",
+        default=DEFAULT_METRICS,
+        help="Metric names to aggregate",
+    )
+
+    args = parser.parse_args()
+
+    cfg, images = load_config(args.config)
+    labels = [safe_name(p) for p in images]
+
+    matrices, pair_metrics = build_metric_matrices(
+        images=images,
+        output_dir=args.output_dir,
+        metric_names=args.metrics,
+    )
+
+    save_group_metrics(
+        images=images,
+        labels=labels,
+        matrices=matrices,
+        pair_metrics=pair_metrics,
+        output_dir=args.output_dir,
+    )
+
+    for metric, matrix in matrices.items():
+        # Skip all-NaN matrices, e.g. Dice if thr_mask was not provided
+        if np.all(~np.isfinite(matrix)):
+            continue
+
+        output_path = os.path.join(args.output_dir, f"matrix_{metric}.png")
+        plot_matrix(matrix, labels, metric, output_path)
+
+
+if __name__ == "__main__":
+    main()
