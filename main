@@ -59,6 +59,69 @@ fi
 mkdir -p output
 
 # ---------------------------------------------------------------------------
+# Build labels from Brainlife _inputs metadata
+# ---------------------------------------------------------------------------
+mapfile -t LABELS < <(
+    jq -r '
+        ._inputs[]? |
+        .meta as $m |
+        ($m.subject // "unknown") as $sub |
+        ($m.session // empty) as $ses |
+        if $ses == "" or $ses == null then
+            $sub
+        else
+            "\($sub)_ses-\($ses)"
+        end
+    ' config.json 2>/dev/null
+)
+
+if [ "${#LABELS[@]}" -ne "$num_images" ]; then
+    echo "Warning: could not derive labels from config.json _inputs; using filenames." >&2
+    LABELS=()
+    for img in "${IMAGES[@]}"; do
+        base="$(basename "$img")"
+        base="${base%.nii.gz}"
+        base="${base%.nii}"
+        LABELS+=("$base")
+    done
+fi
+
+echo "Input labels:"
+for ((i=0; i<num_images; i++)); do
+    echo "  [$i] ${LABELS[$i]} -> ${IMAGES[$i]}"
+done
+
+labels_json="output/input_labels.json"
+
+python3 - "${labels_json}" "${IMAGES[@]}" -- "${LABELS[@]}" <<'PY'
+import json
+import sys
+
+out = sys.argv[1]
+args = sys.argv[2:]
+
+sep = args.index("--")
+images = args[:sep]
+labels = args[sep + 1:]
+
+with open(out, "w") as f:
+    json.dump(
+        {
+            "images": [
+                {
+                    "index": i,
+                    "path": img,
+                    "label": labels[i],
+                }
+                for i, img in enumerate(images)
+            ]
+        },
+        f,
+        indent=4,
+    )
+PY
+
+# ---------------------------------------------------------------------------
 # Run pairwise upper-triangular QC
 # ---------------------------------------------------------------------------
 num_pairs=0
@@ -76,6 +139,8 @@ for ((i=0; i<num_images; i++)); do
         echo "Running QC pair ${i} vs ${j}"
         echo "Fixed image:  $fixed"
         echo "Moving image: $moving"
+        echo "Fixed label:  ${LABELS[$i]}"
+        echo "Moving label: ${LABELS[$j]}"
         echo "Output dir:   $pair_dir"
         echo "------------------------------------------------------------"
 
@@ -104,6 +169,7 @@ echo "Building group-level metric matrices ..."
 
 run_in_env python3 "${SCRIPT_DIR}/aggregate_pairwise_qc.py" \
     --config config.json \
+    --labels-json "$labels_json" \
     --output-dir output
 
 # ---------------------------------------------------------------------------
@@ -111,14 +177,14 @@ run_in_env python3 "${SCRIPT_DIR}/aggregate_pairwise_qc.py" \
 # ---------------------------------------------------------------------------
 echo "Generating product.json ..."
 
-bash "${SCRIPT_DIR}/generate_product_json.sh" --compress output product.json
+bash "${SCRIPT_DIR}/generate_product_json.sh" --compress ./figures/images product.json
 
 # ---------------------------------------------------------------------------
 # Generate figures/images + figures/images.json
 # ---------------------------------------------------------------------------
 echo "Generating figures manifest ..."
 
-IMAGE_DIR="figures/images"
+IMAGE_DIR="output"
 OUTPUT_DIR="."
 
 bash "${SCRIPT_DIR}/generate_figures_manifest.sh" "$IMAGE_DIR" "$OUTPUT_DIR"
