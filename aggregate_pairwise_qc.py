@@ -20,6 +20,25 @@ DEFAULT_METRICS = [
     "jaccard",
 ]
 
+def save_matrix_csv(matrix, labels, metric, output_path):
+    """
+    Save a pairwise metric matrix as CSV.
+
+    First row and first column contain image labels.
+    """
+    with open(output_path, "w") as f:
+        f.write("label," + ",".join(labels) + "\n")
+
+        for label, row in zip(labels, matrix):
+            values = []
+            for val in row:
+                if np.isfinite(val):
+                    values.append(f"{val:.10g}")
+                else:
+                    values.append("")
+            f.write(label + "," + ",".join(values) + "\n")
+
+    print(f"[GROUP QC] Saved {output_path}")
 
 def safe_name(path):
     base = os.path.basename(path)
@@ -231,13 +250,15 @@ def main():
         # The diagonal alone does not mean the metric was actually computed.
         offdiag = matrix.copy()
         np.fill_diagonal(offdiag, np.nan)
-
+    
         if np.all(~np.isfinite(offdiag)):
             continue
-
-        output_path = os.path.join(args.output_dir, f"matrix_{metric}.png")
-        plot_matrix(matrix, labels, metric, output_path)
-
+    
+        png_path = os.path.join(args.output_dir, f"matrix_{metric}.png")
+        csv_path = os.path.join(args.output_dir, f"matrix_{metric}.csv")
+    
+        plot_matrix(matrix, labels, metric, png_path)
+        save_matrix_csv(matrix, labels, metric, csv_path)
 
 if __name__ == "__main__":
     main()
