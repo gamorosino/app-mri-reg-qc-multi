@@ -90,7 +90,7 @@ matrix_jaccard.png
 
 ⸻
 
-Requirements
+## Requirements
 
 To run the app, you only need one of:
 
@@ -114,7 +114,7 @@ The app also uses helper scripts to generate:
 
 ⸻
 
-Usage
+## Usage
 
 Running on Brainlife.io
 
@@ -157,7 +157,7 @@ bash ./main
 
 ⸻
 
-Configuration
+## Configuration
 
 Key	Type	Default	Description
 images	array of strings	—	List of NIfTI images to compare. At least two images are required.
@@ -219,7 +219,7 @@ Jaccard are not produced.
 
 ⸻
 
-Outputs
+## Outputs
 
 Main outputs
 
@@ -281,7 +281,7 @@ If subject/session metadata is unavailable, the app falls back to the input file
 
 ⸻
 
-Notes
+## Notes
 
 * The app computes only the upper-triangular pairwise comparisons.
 * Matrix outputs are filled symmetrically for easier visualization.
@@ -293,7 +293,7 @@ Notes
 
 ⸻
 
-Citation
+## Citation
 
 If you use this app in a publication, please cite:
 
