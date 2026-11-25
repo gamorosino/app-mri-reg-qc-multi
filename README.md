@@ -1,5 +1,44 @@
 # MRI Registration QC: Pairwise Group Comparison
 
+<!-- brainlife-app:begin (generated from the App manifest; edit the manifest, not this block) -->
+
+> **Compares every pair of FA maps from several tensor datasets with registration similarity metrics (NMI, NCC, MSE, SSIM, Dice, Jaccard) and produces per-pair QC figures and group-level metric matrices.**
+
+Takes the FA map of each input tensor dataset, resamples the second image of each pair into the first image's grid when needed, and computes similarity and optional threshold-mask overlap metrics for all unique pairs. It writes checkerboard, edge-overlay and difference figures per pair and one pairwise matrix (PNG and CSV) per metric. Use it to check how well repeated sessions, subjects or processing outputs are aligned. At least two inputs are required; it does not perform registration itself.
+
+| | |
+|---|---|
+| 📥 **Inputs** | `neuro/tensor` |
+| 📤 **Outputs** | `generic/images` · `raw` |
+| 🐳 **Container** | `gamorosino/tract_align:v1.0` |
+| ⚙️ **Resources** | 1 CPUs · 8 GB memory · 6 h walltime |
+| 🔗 **Run it** | [doi.org/10.25663/brainlife.app.924](https://doi.org/10.25663/brainlife.app.924) |
+
+#### 📥 Inputs
+
+| Input | Datatype | Required | Description |
+|---|---|---|---|
+| `tensor` | `neuro/tensor` | yes | Two or more tensor datasets; only the FA map of each is used. At least two inputs; images should already be registered to a common space. |
+
+#### 📤 Outputs
+
+| Output | Datatype | Description |
+|---|---|---|
+| `figures` | `generic/images` | PNG QC figures (per-pair views, mask overlaps and group metric matrices) with an images.json manifest. |
+| `output` | `raw` | Per-pair QC directories with metrics, group-level metric matrices as CSV and PNG, and input_labels.json. |
+
+<details>
+<summary><b>⚙️ Parameters</b> (2)</summary>
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `checkerboard_tiles` | number | `8` | A visualization that alternates patches of two images in a checkerboard pattern to highlight local alignment differences. |
+| `thr_mask` | number |  | A threshold-based mask applied to both fixed and moving images to compute overlap metrics (e.g., Dice), where a single value (LOW) selects voxels with values > LOW, and two values (LOW,HIGH) select voxels with LOW < value < HIGH. |
+
+</details>
+
+<!-- brainlife-app:end -->
+
 An automated quality-check pipeline for **multi-image MRI registration comparison**.  
 Given a set of NIfTI images, the app computes pairwise registration similarity metrics
 for all upper-triangular image pairs and produces both per-pair QC figures and
